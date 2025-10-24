@@ -6,30 +6,22 @@ dotenv.config();
 
 const app = express();
 
-// Parse multiple origins from .env
+// Parse allowed origins from .env
 const allowedOrigins = process.env.CORS_ORIGIN.split(",");
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // Postman/curl
-      if (!allowedOrigins.includes(origin)) {
-        return callback(
-          new Error("CORS policy does not allow this origin."),
-          false
-        );
-      }
-      return callback(null, true);
-    },
+    origin: allowedOrigins,
     credentials: true,
   })
 );
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ limit: "16kb", extended: true }));
-app.use(express.static("public"));
 app.use(cookieParser());
+app.use(express.static("public"));
 
+// Health check
 app.get("/", (req, res) => res.send("Server is running!"));
 
 // Routes

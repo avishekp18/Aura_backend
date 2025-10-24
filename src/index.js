@@ -13,11 +13,15 @@ connectToMongo()
   .then(() => {
     const server = http.createServer(app);
 
+    // Socket.io with CORS
     const io = new Server(server, {
-      cors: { origin: process.env.CORS_ORIGIN.split(","), credentials: true },
+      cors: {
+        origin: process.env.CORS_ORIGIN.split(","),
+        credentials: true,
+      },
     });
 
-    // JWT auth
+    // JWT auth for sockets
     io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error("Authentication required"));
@@ -34,14 +38,12 @@ connectToMongo()
     io.on("connection", (socket) => {
       console.log("User connected:", socket.userId);
 
-      // Join a chat room by chatId
       socket.on("joinChat", ({ chatId }) => {
         if (!chatId) return;
         socket.join(chatId);
         console.log(`User ${socket.userId} joined chat ${chatId}`);
       });
 
-      // Send message in a chat
       socket.on("sendMessage", async ({ chatId, content }) => {
         if (!chatId || !content) return;
 
@@ -54,10 +56,9 @@ connectToMongo()
 
           await message.populate("sender", "username fullName profilePicture");
 
-          // Emit message to all users in the same chat room
           io.to(chatId).emit("receiveMessage", message);
         } catch (err) {
-          console.error(err);
+          console.error("Socket sendMessage error:", err);
           socket.emit("error", { message: "Failed to send message" });
         }
       });

@@ -258,21 +258,59 @@ export const toggleLikePost = asyncHandler(async (req, res, next) => {
 });
 
 // List of all users who liked a post
+// export const getPostLikers = asyncHandler(async (req, res, next) => {
+//   const { postId } = req.params;
+
+//   const post = await Post.findById(postId).populate(
+//     "likes",
+//     "fullName profilePicture username"
+//   );
+//   if (!post) {
+//     return next(new ApiError(404, "Post not found"));
+//   }
+
+//   res
+//     .status(200)
+//     .json(
+//       new ApiResponse(200, "List of likers fetched successfully", post.likes)
+//     );
+// });
+// Controller to get all users who liked a post – latest like first
 export const getPostLikers = asyncHandler(async (req, res, next) => {
   const { postId } = req.params;
 
-  const post = await Post.findById(postId).populate(
-    "likes",
-    "fullName profilePicture username"
-  );
+  // 1. Find the post
+  const post = await Post.findById(postId).select("likes");
   if (!post) {
     return next(new ApiError(404, "Post not found"));
   }
 
+  // 2. If there are no likes → early return
+  if (!post.likes || post.likes.length === 0) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, "No one has liked this post yet", []));
+  }
+
+  // 3. Populate the likes array **in the same order** as stored in the DB
+  //     (the order is the order in which users liked the post)
+  const populatedLikes = await Post.populate(post, {
+    path: "likes",
+    select: "fullName profilePicture username",
+    options: { sort: { _id: 1 } }, // keep DB order (oldest → newest)
+  });
+
+  // 4. Reverse the array so newest likes appear first
+  const latestFirst = populatedLikes.likes.reverse();
+
   res
     .status(200)
     .json(
-      new ApiResponse(200, "List of likers fetched successfully", post.likes)
+      new ApiResponse(
+        200,
+        "List of likers fetched successfully (latest first)",
+        latestFirst
+      )
     );
 });
 

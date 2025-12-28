@@ -5,6 +5,7 @@ import http from "http";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { Message } from "./models/message.model.js";
+import { Chat } from "./models/chat.model.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -48,13 +49,25 @@ connectToMongo()
         if (!chatId || !content) return;
 
         try {
+          const chat = await Chat.findById(chatId);
+          if (!chat) return socket.emit("error", { message: "Chat not found" });
+          if (!chat.users.some((u) => u.toString() === socket.userId)) {
+            return socket.emit("error", {
+              message: "Not a member of this chat",
+            });
+          }
+
           const message = await Message.create({
             sender: socket.userId,
             chat: chatId,
             content,
           });
 
-          await message.populate("sender", "username fullName profilePicture");
+          await message.populate(
+            "sender",
+            "username fullName profilePicture email"
+          );
+          await Chat.findByIdAndUpdate(chatId, { latestMessage: message._id });
 
           io.to(chatId).emit("receiveMessage", message);
         } catch (err) {

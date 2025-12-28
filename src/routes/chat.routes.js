@@ -6,6 +6,7 @@ import {
   sendMessage,
   fetchMessages,
   fetchFriends,
+  deleteChat,
 } from "../controllers/chat.controller.js";
 
 const router = express.Router();
@@ -15,5 +16,6 @@ router.get("/", fetchUser, fetchChats);
 router.post("/message", fetchUser, sendMessage);
 router.get("/messages/:chatId", fetchUser, fetchMessages);
 router.get("/friends", fetchUser, fetchFriends);
+router.delete("/:chatId", fetchUser, deleteChat);
 
 export default router;

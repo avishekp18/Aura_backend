@@ -21,7 +21,7 @@ app.use(express.urlencoded({ limit: "16kb", extended: true }));
 app.use(cookieParser());
 app.use(express.static("public"));
 
-// Health check
+// Health checkfvzcv
 app.get("/", (req, res) => res.send("Server is running!"));
 
 // Routes

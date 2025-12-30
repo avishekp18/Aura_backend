@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 import { Chat } from "../models/chat.model.js";
 import { Message } from "../models/message.model.js";
 import { User } from "../models/user.model.js";
+import {
+  getCache,
+  setCache,
+  deleteCache,
+  deleteByPrefix,
+} from "../utils/cache.js";
 
 // Access or create a 1-to-1 chat
 export const accessChat = async (req, res) => {
@@ -39,6 +45,9 @@ export const accessChat = async (req, res) => {
     "users",
     "-password"
   );
+  // Invalidate chat list cache for this user and the other participant
+  deleteCache(`chats:${loggedUserId}`);
+  deleteCache(`chats:${user._id.toString()}`);
   res.json(fullChat);
 };
 
@@ -48,6 +57,10 @@ export const fetchChats = async (req, res) => {
     const loggedUserId = req.user?.id;
     if (!loggedUserId)
       return res.status(401).json({ error: "Authentication required" });
+
+    const cacheKey = `chats:${loggedUserId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
 
     const chats = await Chat.find({
       users: { $elemMatch: { $eq: loggedUserId } },
@@ -61,6 +74,7 @@ export const fetchChats = async (req, res) => {
         },
       })
       .sort({ updatedAt: -1 });
+    setCache(cacheKey, chats, 60_000); // cache chats 1 minute
     res.json(chats);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -79,6 +93,10 @@ export const fetchMessages = async (req, res) => {
       return res.status(400).json({ error: "Invalid chat id" });
     }
 
+    const cacheKey = `messages:${loggedUserId}:${chatId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
     const chat = await Chat.findById(chatId);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
     if (!chat.users.some((u) => u.toString() === loggedUserId)) {
@@ -88,6 +106,7 @@ export const fetchMessages = async (req, res) => {
     const messages = await Message.find({ chat: chatId })
       .populate("sender", "username fullName email profilePicture")
       .sort({ createdAt: 1 });
+    setCache(cacheKey, messages, 30_000); // cache messages 30s
     res.json(messages);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -122,17 +141,29 @@ export const sendMessage = async (req, res) => {
 
   await Chat.findByIdAndUpdate(chatId, { latestMessage: message._id });
 
+  // Invalidate caches for messages and chats for members
+  chat.users.forEach((u) => {
+    deleteCache(`messages:${u.toString()}:${chatId}`);
+    deleteCache(`chats:${u.toString()}`);
+  });
+
   res.json(message);
 };
 
 // Fetch friends
 export const fetchFriends = async (req, res) => {
   try {
-    const user = await User.findById(req.user?._id).populate(
+    const userId = req.user?._id;
+    const cacheKey = `friends:${userId}`;
+    const cached = getCache(cacheKey);
+    if (cached) return res.json(cached);
+
+    const user = await User.findById(userId).populate(
       "friends",
       "username fullName email profilePicture coverImage"
     );
     if (!user) return res.status(404).json({ error: "User not found" });
+    setCache(cacheKey, user.friends, 60_000); // cache friends 1 minute
     res.json(user.friends);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -159,6 +190,13 @@ export const deleteChat = async (req, res) => {
 
     await Message.deleteMany({ chat: chatId });
     await Chat.findByIdAndDelete(chatId);
+
+    // Invalidate caches for all members
+    chat.users.forEach((u) => {
+      const uid = u.toString();
+      deleteCache(`messages:${uid}:${chatId}`);
+      deleteCache(`chats:${uid}`);
+    });
 
     return res.json({ success: true, chatId });
   } catch (err) {

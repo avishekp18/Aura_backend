@@ -76,6 +76,17 @@ connectToMongo()
         }
       });
 
+      // Typing indicators
+      socket.on("typing", ({ chatId }) => {
+        if (!chatId) return;
+        socket.to(chatId).emit("typing", { chatId, userId: socket.userId });
+      });
+
+      socket.on("stopTyping", ({ chatId }) => {
+        if (!chatId) return;
+        socket.to(chatId).emit("stopTyping", { chatId, userId: socket.userId });
+      });
+
       socket.on("disconnect", () => {
         console.log("User disconnected:", socket.userId);
       });
